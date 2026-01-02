@@ -1,0 +1,3699 @@
+# Source: https://raw.githubusercontent.com/projectcalico/calico/v3.28.0/manifests/calico.yaml
+# This manifest installs the Calico CNI components.
+# It includes the Calico node daemonset, the Calico kube-controllers deployment,
+# and the necessary RBAC roles and bindings.
+
+# --- PodDisruptionBudget for calico-kube-controllers
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: calico-kube-controllers
+  namespace: kube-system
+  labels:
+    k8s-app: calico-kube-controllers
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      k8s-app: calico-kube-controllers
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: calico-kube-controllers
+  namespace: kube-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: calico-node
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: calico-kube-controllers
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+      - pods
+      - namespaces
+      - serviceaccounts
+    verbs:
+      - watch
+      - list
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - endpoints
+      - services
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - secrets
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - networkpolicies
+    verbs:
+      - watch
+      - list
+  - apiGroups:
+      - operator.tigera.io
+    resources:
+      - imagesets
+    verbs:
+      - get
+  - apiGroups:
+      - crd.projectcalico.org
+    resources:
+      - felixconfigurations
+      - bgppeers
+      - bgpconfigurations
+      - ippools
+      - ipreservations
+      - ipamblocks
+      - globalnetworkpolicies
+      - globalnetworksets
+      - networkpolicies
+      - networksets
+      - clusterinformations
+      - hostendpoints
+      - blockaffinities
+      - caliconodestatuses
+      - ipamconfigs
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+      - patch
+  - apiGroups:
+      - crd.projectcalico.org
+    resources:
+      - tiers
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+      - delete
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: calico-node
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - namespaces
+      - serviceaccounts
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - endpoints
+      - services
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - watch
+      - update
+      - patch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes/status
+    verbs:
+      - update
+      - patch
+  - apiGroups:
+      - networking.k8s.io
+    resources:
+      - networkpolicies
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - operator.tigera.io
+    resources:
+      - imagesets
+    verbs:
+      - get
+  - apiGroups:
+      - crd.projectcalico.org
+    resources:
+      - globalnetworkpolicies
+      - globalnetworksets
+      - networkpolicies
+      - networksets
+      - clusterinformations
+      - hostendpoints
+      - ippools
+      - ipreservations
+      - ipamblocks
+      - blockaffinities
+      - ipamconfigs
+      - felixconfigurations
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - crd.projectcalico.org
+    resources:
+      - caliconodestatuses
+    verbs:
+      - get
+      - list
+      - watch
+      - create
+      - update
+  - apiGroups:
+      - crd.projectcalico.org
+    resources:
+      - caliconodestatuses/status
+    verbs:
+      - update
+      - patch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: calico-kube-controllers
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: calico-kube-controllers
+subjects:
+  - kind: ServiceAccount
+    name: calico-kube-controllers
+    namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: calico-node
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: calico-node
+subjects:
+  - kind: ServiceAccount
+    name: calico-node
+    namespace: kube-system
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: calico-config
+  namespace: kube-system
+data:
+  typha_service_name: "none"
+  calico_backend: "bird"
+  veth_mtu: "1440"
+  cni_network_config: |-
+    {
+      "name": "k8s-pod-network",
+      "cniVersion": "0.3.1",
+      "plugins": [
+        {
+          "type": "calico",
+          "log_level": "info",
+          "log_file_path": "/var/log/calico/cni/cni.log",
+          "datastore_type": "kubernetes",
+          "nodename": "__KUBERNETES_NODE_NAME__",
+          "mtu": __VETH_MTU__,
+          "ipam": {
+              "type": "calico-ipam"
+          },
+          "policy": {
+              "type": "k8s"
+          },
+          "kubernetes": {
+              "kubeconfig": "__KUBECONFIG_FILEPATH__"
+          }
+        },
+        {
+          "type": "portmap",
+          "snat": true,
+          "capabilities": {"portMappings": true}
+        },
+        {
+          "type": "bandwidth",
+          "capabilities": {"bandwidth": true}
+        }
+      ]
+    }
+---
+# This manifest includes the following CNI versions:
+# - Calico CNI v3.28.0
+# - Flannel CNI v1.2.1
+# - Conmon v2.0.25
+# - CNI-Genie v1.1.0-dev
+# - CNI-Plugins v1.1.1
+# - Dস্বরূপ v0.4.0
+# - Multus CNI v4.0.2
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: bgpconfigurations.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: BGPConfiguration
+    listKind: BGPConfigurationList
+    plural: bgpconfigurations
+    singular: bgpconfiguration
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: BGPConfiguration contains the configuration for any BGP routing.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: BGPConfigurationSpec contains the values of the BGP configuration.
+              properties:
+                asNumber:
+                  description: 'ASNumber is the default AS number for the router. If
+                    a node''s BGPPeer does not specify an AS number, this value is
+                    used. If not specified on a BGPPeer or in the default configuration,
+                    the node will not participate in BGP routing. If specified, this
+                    value must be a valid 16-bit or 32-bit AS number.'
+                  type: integer
+                bindMode:
+                  description: BindMode indicates how the BGP daemon should bind to
+                    the host. If set to `None`, the BGP daemon will not bind to any
+                    host IP addresses, and you must configure BGPPeers to listen on
+                    specific addresses. If set to `Node`, the BGP daemon will bind
+                    to the node''s IP address. If not specified, the daemon will not
+                    bind to any host IP addresses.
+                  enum:
+                    - Node
+                    - None
+                  type: string
+                communities:
+                  description: Communities is a list of BGP community values and their
+                    names. For incoming routes, if the route has a community that
+                    matches a name in this list, the Community is added to the route''s
+                    attributes. For outgoing routes, if a route has a community that
+                    matches a name in this list, the Community is not advertised to
+                    the peer.
+                  items:
+                    description: Community contains the configuration for a BGP community.
+                    properties:
+                      name:
+                        description: Name is a name for this community.
+                        type: string
+                      value:
+                        description: 'Value is the community value. This can be a community
+                          value in the format `as-number:community-value` or a single
+                          integer value. If the value is a single integer, it is treated
+                          as a 32-bit community value.'
+                        type: string
+                    required:
+                      - value
+                    type: object
+                  type: array
+                ignoredInterfaces:
+                  description: IgnoredInterfaces is a list of interfaces that the
+                    BGP daemon should ignore when discovering BGP neighbors.
+                  items:
+                    type: string
+                  type: array
+                listenPort:
+                  description: ListenPort is the port where BGP protocol should listen.
+                    Defaults to 179.
+                  type: integer
+                logSeverityScreen:
+                  description: 'LogSeverityScreen is the log severity above which
+                    logs are sent to the stdout. [Default: Info]'
+                  enum:
+                    - Trace
+                    - Debug
+                    - Info
+                    - Warn
+                    - Error
+                    - Fatal
+                  type: string
+                nodeMeshMaxRestartTime:
+                  description: Time to allow for sending routes to peers between restarts.
+                    When specified, this is configured as the graceful restart timeout.
+                    When not specified, the BGP daemon may not remember routes learned
+                    from peers across restarts.
+                  type: string
+                nodeToNodeMeshEnabled:
+                  description: 'NodeToNodeMeshEnabled specifies whether to create
+                    a full-mesh of BGP peers between all nodes in the cluster. [Default:
+                    true]'
+                  type: boolean
+                prefixAdvertisements:
+                  description: PrefixAdvertisements contains per-prefix advertisement
+                    configuration.
+                  items:
+                    description: PrefixAdvertisement contains the configuration for
+                      a BGP prefix advertisement.
+                    properties:
+                      cidrs:
+                        description: CIDRs is a list of CIDRs to advertise.
+                        items:
+                          type: string
+                        type: array
+                      communities:
+                        description: Communities is a list of communities to advertise
+                          with each CIDR.
+                        items:
+                          type: string
+                        type: array
+                    required:
+                      - cidrs
+                    type: object
+                  type: array
+                serviceClusterIPs:
+                  description: ServiceClusterIPs are the CIDR blocks from which service
+                    cluster IPs are allocated. If specified, Calico will advertise
+                    these blocks, as well as the IPs of any services that fall within
+                    these blocks.
+                  items:
+                    description: ServiceClusterIPBlock represents a single CIDR block
+                      of service cluster IPs.
+                    properties:
+                      cidr:
+                        type: string
+                    required:
+                      - cidr
+                    type: object
+                  type: array
+                serviceExternalIPs:
+                  description: ServiceExternalIPs are the CIDR blocks for services
+                    with external IPs. If specified, Calico will advertise the IPs
+                    of any services with external IPs that fall within these blocks.
+                  items:
+                    description: ServiceExternalIPBlock represents a single CIDR
+                      block of service external IPs.
+                    properties:
+                      cidr:
+                        type: string
+                    required:
+
+                    - cidr
+                    type: object
+                  type: array
+                serviceLoadBalancerIPs:
+                  description: ServiceLoadBalancerIPs are the CIDR blocks for services
+                    with load balancer IPs. If specified, Calico will advertise the
+                    IPs of any services with load balancer IPs that fall within these
+                    blocks.
+                  items:
+                    description: ServiceLoadBalancerIPBlock represents a single CIDR
+                      block of service load balancer IPs.
+                    properties:
+                      cidr:
+                        type: string
+                    required:
+                      - cidr
+                    type: object
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: bgpfilters.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: BGPFilter
+    listKind: BGPFilterList
+    plural: bgpfilters
+    singular: bgpfilter
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: BGPFilterSpec contains the specification for a BGPFilter
+                resource.
+              properties:
+                exportV4:
+                  items:
+                    description: 'BGPFilterRuleV4 defines a BGP filter rule for IPv4
+                      routes. N.B. If any top-level field is not specified, it will
+                      be defaulted to its zero value. N.B. If any second-level field,
+                      such as Cidr, is not specified, it will be defaulted to its
+                      zero value.'
+                    properties:
+                      action:
+                        type: string
+                      destination:
+                        properties:
+                          cidrs:
+                            items:
+                              type: string
+                            type: array
+                          ports:
+                            items:
+                              type: integer
+                            type: array
+                        type: object
+                      interface:
+                        type: string
+                      matchOperator:
+                        type: string
+                      source:
+                        properties:
+                          cidrs:
+                            items:
+                              type: string
+                            type: array
+                          ports:
+                            items:
+                              type: integer
+                            type: array
+                        type: object
+                    type: object
+                  type: array
+                exportV6:
+                  items:
+                    description: 'BGPFilterRuleV6 defines a BGP filter rule for IPv6
+                      routes. N.B. If any top-level field is not specified, it will
+                      be defaulted to its zero value. N.B. If any second-level field,
+                      such as Cidr, is not specified, it will be defaulted to its
+                      zero value.'
+                    properties:
+                      action:
+                        type: string
+                      destination:
+                        properties:
+                          cidrs:
+                            items:
+                              type: string
+                            type: array
+                          ports:
+                            items:
+                              type: integer
+                            type: array
+                        type: object
+                      interface:
+                        type: string
+                      matchOperator:
+                        type: string
+                      source:
+                        properties:
+                          cidrs:
+                            items:
+                              type: string
+                            type: array
+                          ports:
+                            items:
+                              type: integer
+                            type: array
+                        type: object
+                    type: object
+                  type: array
+                importV4:
+                  items:
+                    description: 'BGPFilterRuleV4 defines a BGP filter rule for IPv4
+                      routes. N.B. If any top-level field is not specified, it will
+                      be defaulted to its zero value. N.B. If any second-level field,
+                      such as Cidr, is not specified, it will be defaulted to its
+                      zero value.'
+                    properties:
+                      action:
+                        type: string
+                      destination:
+                        properties:
+                          cidrs:
+                            items:
+                              type: string
+                            type: array
+                          ports:
+                            items:
+                              type: integer
+                            type: array
+                        type: object
+                      interface:
+                        type: string
+                      matchOperator:
+                        type: string
+                      source:
+                        properties:
+                          cidrs:
+                            items:
+                              type: string
+                            type: array
+                          ports:
+                            items:
+                              type: integer
+                            type: array
+                        type: object
+                    type: object
+                  type: array
+                importV6:
+                  items:
+                    description: 'BGPFilterRuleV6 defines a BGP filter rule for IPv6
+                      routes. N.B. If any top-level field is not specified, it will
+                      be defaulted to its zero value. N.B. If any second-level field,
+                      such as Cidr, is not specified, it will be defaulted to its
+                      zero value.'
+                    properties:
+                      action:
+                        type: string
+                      destination:
+                        properties:
+                          cidrs:
+                            items:
+                              type: string
+                            type: array
+                          ports:
+                            items:
+                              type: integer
+                            type: array
+                        type: object
+                      interface:
+                        type: string
+                      matchOperator:
+                        type: string
+                      source:
+                        properties:
+                          cidrs:
+                            items:
+                              type: string
+                            type: array
+                          ports:
+                            items:
+                              type: integer
+                            type: array
+                        type: object
+                    type: object
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: bgppeers.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: BGPPeer
+    listKind: BGPPeerList
+    plural: bgppeers
+    singular: bgppeer
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: BGPPeer contains information about a BGP peer.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: BGPPeerSpec contains the specification for a BGPPeer resource.
+              properties:
+                asNumber:
+                  description: 'ASNumber is the AS number of the peer. If not specified,
+                    this will be inherited from the default BGP configuration. If
+                    specified, this value must be a valid 16-bit or 32-bit AS number.'
+                  type: integer
+                bindAddress:
+                  description: The IP address of the local BGP speaker. If not specified,
+                    the BGP speaker will bind to the node IP.
+                  type: string
+                filters:
+                  description: The ordered set of BGPFilter names to apply to this
+                    BGPPeer. I.e. to apply to all routes from this BGPPeer.
+                  items:
+                    type: string
+                  type: array
+                keepOriginalNextHop:
+                  description: 'KeepOriginalNextHop specifies whether to keep the
+                    original next hop field when exporting routes to this peer. [Default:
+                    false]'
+                  type: boolean
+                maxRestartTime:
+                  description: Time to allow for sending routes to peers between restarts.
+                    When specified, this is configured as the graceful restart timeout.
+                    When not specified, the BGP daemon may not remember routes learned
+                    from peers across restarts.
+                  type: string
+                node:
+                  description: 'Node is the name of the node that this BGP peer is
+                    associated with. If specified, this BGP peer will only be configured
+                    on the specified node. If not specified, this BGP peer will be
+                    configured on all nodes.'
+                  type: string
+                nodeSelector:
+                  description: NodeSelector is a label selector that selects the nodes
+                    that this BGP peer is associated with. If specified, this BGP
+                    peer will only be configured on the nodes that match this selector.
+                    If not specified, this BGP peer will be configured on all nodes.
+                  type: string
+                numAllowedLocalASes:
+                  description: The number of local AS numbers that are allowed in
+                    the AS path.
+                  type: integer
+                password:
+                  description: Password for TCP-MD5 authentication.
+                  properties:
+                    secretKeyRef:
+                      description: Selects a key of a secret in the node's namespace.
+                      properties:
+                        key:
+                          description: The key of the secret to select from.  Must
+                            be a valid C identifier.
+                          type: string
+                        name:
+                          description: 'Name of the referent. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#names
+                            TODO: Add other useful fields. apiVersion, kind, uid?'
+                          type: string
+                        optional:
+                          description: 'Specify whether the Secret or its key must
+                            be defined +optional'
+                          type: boolean
+                      required:
+                        - key
+                      type: object
+                  type: object
+                peerIP:
+                  description: PeerIP is the IP address of the peer.
+                  type: string
+                peerPort:
+                  description: PeerPort is the port number of the peer. If not specified,
+                    the default BGP port (179) will be used.
+                  type: integer
+                peerSelector:
+                  description: PeerSelector is a label selector that selects the
+                    peers that this BGP peer is associated with. If specified, this
+                    BGP peer will only be configured on the nodes that match this
+                    selector. If not specified, this BGP peer will be configured on
+                    all nodes.
+                  type: string
+                sourceAddress:
+                  description: 'Specifies whether to use the node''s internal IP address
+                    or external IP address as the source address for the BGP connection.
+                    [Default: InternalIP]'
+                  enum:
+                    - InternalIP
+                    - ExternalIP
+                  type: string
+                ttlSecurity:
+                  description: TTLSecurity enables / disables TTL security.
+                  type: integer
+              required:
+                - peerIP
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: blockaffinities.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: BlockAffinity
+    listKind: BlockAffinityList
+    plural: blockaffinities
+    singular: blockaffinity
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: BlockAffinitySpec contains the specification for a BlockAffinity
+                resource.
+              properties:
+                cidr:
+                  type: string
+                deleted:
+                  description: Deleted indicates that this block affinity is being
+                    deleted. This field is a string for compatibility with older
+                    releases that treated this field as a boolean. It can be set
+                    to "true" to indicate deletion.
+                  type: string
+                node:
+                  type: string
+                state:
+                  type: string
+              required:
+                - cidr
+                - deleted
+                - node
+                - state
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: caliconodestatuses.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: CalicoNodeStatus
+    listKind: CalicoNodeStatusList
+    plural: caliconodestatuses
+    singular: caliconodestatus
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: CalicoNodeStatusSpec contains the specification for a CalicoNodeStatus
+                resource.
+              properties:
+                classes:
+                  description: Classes declares the types of information to be collected
+                    for this node.
+                  items:
+                    type: string
+                  type: array
+                node:
+                  description: The node name.
+                  type: string
+                updatePeriodSeconds:
+                  description: 'UpdatePeriodSeconds is the period at which Calico
+                    will update the status. A value of 0 indicates that the status
+                    should be updated as fast as possible. [Default: 10]'
+                  type: integer
+              type: object
+            status:
+              description: CalicoNodeStatusStatus defines the observed state of CalicoNodeStatus.
+              properties:
+                agent:
+                  description: Agent holds agent-specific status.
+                  properties:
+                    birdV4:
+                      description: BIRDv4 holds BGP agent status for IPv4.
+                      properties:
+                        lastBootTime:
+                          description: LastBootTime holds the last boot time of the
+                            BGP agent.
+                          type: string
+                        lastConnectTime:
+                          description: LastConnectTime holds the last connect time
+                            of the BGP agent.
+                          type: string
+                        routerID:
+                          description: RouterID holds the router ID of the BGP agent.
+                          type: string
+                        state:
+                          description: State holds the state of the BGP agent.
+                          type: string
+                        version:
+                          description: Version holds the version of the BGP agent.
+                          type: string
+                      type: object
+                    birdV6:
+                      description: BIRDv6 holds BGP agent status for IPv6.
+                      properties:
+                        lastBootTime:
+                          description: LastBootTime holds the last boot time of the
+                            BGP agent.
+                          type: string
+                        lastConnectTime:
+                          description: LastConnectTime holds the last connect time
+                            of the BGP agent.
+                          type: string
+                        routerID:
+                          description: RouterID holds the router ID of the BGP agent.
+                          type: string
+                        state:
+                          description: State holds the state of the BGP agent.
+                          type: string
+                        version:
+                          description: Version holds the version of the BGP agent.
+                          type: string
+                      type: object
+                  type: object
+                bgp:
+                  description: BGP holds BGP-specific status.
+                  properties:
+                    numberEstablishedV4:
+                      description: The total number of IPv4 BGP peers that are established.
+                      type: integer
+                    numberEstablishedV6:
+                      description: The total number of IPv6 BGP peers that are established.
+                      type: integer
+                    numberNotEstablishedV4:
+                      description: The total number of IPv4 BGP peers that are not
+                        established.
+                      type: integer
+                    numberNotEstablishedV6:
+                      description: The total number of IPv6 BGP peers that are not
+                        established.
+                      type: integer
+                    peersV4:
+                      description: PeersV4 holds the status of all IPv4 BGP peers.
+                      items:
+                        description: CalicoNodePeer contains the status of a BGP peer.
+                        properties:
+                          peerIP:
+                            description: IP address of the peer.
+                            type: string
+                          since:
+                            description: Time since the session was last established.
+                            type: string
+                          state:
+                            description: The current state of the BGP session.
+                            type: string
+                          type:
+                            description: Type of peer.
+                            type: string
+                        type: object
+                      type: array
+                    peersV6:
+                      description: PeersV6 holds the status of all IPv6 BGP peers.
+                      items:
+                        description: CalicoNodePeer contains the status of a BGP peer.
+                        properties:
+                          peerIP:
+                            description: IP address of the peer.
+                            type: string
+                          since:
+                            description: Time since the session was last established.
+                            type: string
+                          state:
+                            description: The current state of the BGP session.
+                            type: string
+                          type:
+                            description: Type of peer.
+                            type: string
+                        type: object
+                      type: array
+                  required:
+                    - numberEstablishedV4
+                    - numberEstablishedV6
+                    - numberNotEstablishedV4
+                    - numberNotEstablishedV6
+                  type: object
+                routes:
+                  description: Routes holds routing table specific status.
+                  properties:
+                    routesV4:
+                      description: RoutesV4 holds the status of all IPv4 routes.
+                      items:
+                        description: CalicoNodeRoute contains the status of a route.
+                        properties:
+                          destination:
+                            description: Destination of the route.
+                            type: string
+                          gateway:
+                            description: Gateway of the route.
+                            type: string
+                          interface:
+                            description: Interface of the route.
+                            type: string
+                          learnedFrom:
+                            description: Where the route was learned from.
+                            properties:
+                              peerIP:
+                                description: IP address of the peer.
+                                type: string
+                              sourceType:
+                                description: Type of the source.
+                                type: string
+                              type:
+                                description: Type of peer.
+                                type: string
+                            type: object
+                          type:
+                            description: Type of the route.
+                            type: string
+                        type: object
+                      type: array
+                    routesV6:
+                      description: RoutesV6 holds the status of all IPv6 routes.
+                      items:
+                        description: CalicoNodeRoute contains the status of a route.
+                        properties:
+                          destination:
+                            description: Destination of the route.
+                            type: string
+                          gateway:
+                            description: Gateway of the route.
+                            type: string
+                          interface:
+                            description: Interface of the route.
+                            type: string
+                          learnedFrom:
+                            description: Where the route was learned from.
+                            properties:
+                              peerIP:
+                                description: IP address of the peer.
+                                type: string
+                              sourceType:
+                                description: Type of the source.
+                                type: string
+                              type:
+                                description: Type of peer.
+                                type: string
+                            type: object
+                          type:
+                            description: Type of the route.
+                            type: string
+                        type: object
+                      type: array
+                  type: object
+                updateTimestamp:
+                  description: LastUpdated is a timestamp representing the server time
+                    when the status was last updated.
+                  format: date-time
+                  type: string
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clusterinformations.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: ClusterInformation
+    listKind: ClusterInformationList
+    plural: clusterinformations
+    singular: clusterinformation
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: ClusterInformation contains information about the cluster.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: ClusterInformationSpec contains the values of describing
+                the cluster.
+              properties:
+                calicoVersion:
+                  description: CalicoVersion is the version of Calico that the cluster
+                    is running.
+                  type: string
+                clusterGUID:
+                  description: ClusterGUID is the GUID of the cluster.
+                  type: string
+                clusterType:
+                  description: 'ClusterType is the type of the cluster. One of: k8s,
+                    openshift, mesmer, kdd'
+                  type: string
+                datastoreReady:
+                  description: DatastoreReady is used during significant datastore
+                    migrations to signal to components such as Felix that it should
+                    wait before accessing the datastore.
+                  type: boolean
+                variant:
+                  description: Variant is the product name that is using Calico.
+                  type: string
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: felixconfigurations.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: FelixConfiguration
+    listKind: FelixConfigurationList
+    plural: felixconfigurations
+    singular: felixconfiguration
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: FelixConfiguration contains the configuration for Felix.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: FelixConfigurationSpec contains the values of the Felix
+                configuration.
+              properties:
+                allowIPIPPacketsFromWorkloads:
+                  description: 'AllowIPIPPacketsFromWorkloads controls whether Felix
+                    will add a rule to the INPUT chain to allow IPIP packets from
+                    workload interfaces. Default: false'
+                  type: boolean
+                allowVXLANPacketsFromWorkloads:
+                  description: 'AllowVXLANPacketsFromWorkloads controls whether Felix
+                    will add a rule to the INPUT chain to allow VXLAN packets from
+                    workload interfaces. Default: false'
+                  type: boolean
+                awsSrcDstCheck:
+                  description: 'Set source-destination-check on AWS EC2 instances.
+                    Can be either "Enable" or "Disable". [Default: Enable]'
+                  enum:
+                    - Enable
+                    - Disable
+                  type: string
+                bpfConnectTimeLoadBalancingEnabled:
+                  description: 'BPFConnectTimeLoadBalancingEnabled when in BPF mode,
+                    controls whether Felix installs the connection-time load balancer.
+                    If you set this to false, you must install a kube-proxy that is
+                    compatible with your CNI. [Default: true]'
+                  type: boolean
+                bpfDataIfacePattern:
+                  description: BPFDataIfacePattern is a regular expression that controls
+                    which interfaces Felix should attach BPF programs to in order
+                    to catch traffic to/from workloads. This is only used when BPFEnabled
+                    is true. If this is blank, Felix will try to auto-detect the interface.
+                  type: string
+                bpfDisableUnprivileged:
+                  description: 'BPFDisableUnprivileged, if true, Felix will disable
+                    BPF for unprivileged processes. [Default: true]'
+                  type: boolean
+                bpfEnabled:
+                  description: 'BPFEnabled, if true, Felix will use BPF instead of
+                    iptables for networking. Requires a kernel with BPF support. [Default:
+                    false]'
+                  type: boolean
+                bpfEnforceRPF:
+                  description: 'BPFEnforceRPF enforces Reverse Path Forwarding checks.
+                    Can be "Strict" or "Loose" or "Disabled". [Default: Strict]'
+                  enum:
+                    - Strict
+                    - Loose
+                    - Disabled
+                  type: string
+                bpfExtToServiceConnmark:
+                  description: 'BPFExtToServiceConnmark in BPF mode, control a 32bit
+                    mark that is set on connections from an external client to a local
+                    service. This mark allows us to identify connection originating
+                    from an external client without the use of NAT. [Default: 0]'
+                  type: integer
+                bpfExternalServiceMode:
+                  description: 'BPFExternalServiceMode in BPF mode, controls how connections
+                    from outside the cluster to services are handled. Can be "Tunnel"
+                    or "DSR". [Default: Tunnel]'
+                  type: string
+                bpfKubeProxyEndpointSlicesEnabled:
+                  description: BPFKubeProxyEndpointSlicesEnabled in BPF mode, controls
+                    whether Felix uses EndpointSlices or not.
+                  type: boolean
+                bpfKubeProxyIptablesCleanupEnabled:
+                  description: 'BPFKubeProxyIptablesCleanupEnabled in BPF mode, controls
+                    whether Felix should clean up kube-proxy''s iptables rules. [Default:
+                    true]'
+                  type: boolean
+                bpfKubeProxyMinSyncPeriod:
+                  description: 'BPFKubeProxyMinSyncPeriod in BPF mode, controls the
+                    minimum time between updates to the BPF maps from Kubernetes.
+                    [Default: 1s]'
+                  type: string
+                bpfL3IfacePattern:
+                  description: BPFKubeProxyL3IfacePattern is a regular expression
+                    that allows to select L3 interfaces to attach BPF programs to
+                    in the host networking namespace which will be used to introduce
+                    routes into the host stack. This is only used when BPFEnabled
+                    is true. If this is blank, Felix will try to auto-detect the interface.
+                  type: string
+                bpfLogLevel:
+                  description: 'BPFLogLevel controls the log level of the BPF programs.
+                    One of "Off", "Info", or "Debug". [Default: Off].'
+                  type: string
+                bpfMapSizeCDS:
+                  description: 'BPFMapSizeCDS in BPF mode, controls the size of the
+                    Conntrack-like map. [Default: 1048576]'
+                  type: integer
+                bpfMapSizeIPSets:
+                  description: 'BPFMapSizeIPSets in BPF mode, controls the size of
+                    the IP sets map. [Default: 1048576]'
+                  type: integer
+                bpfMapSizeIfState:
+                  description: 'BPFMapSizeIfState in BPF mode, controls the size of
+                    the interface state map. [Default: 1024]'
+                  type: integer
+                bpfMapSizeLBLegacy:
+                  description: 'BPFMapSizeLBLegacy in BPF mode, controls the size
+                    of the legacy load balancing maps. [Default: 65536]'
+                  type: integer
+                bpfMapSizeNATAffinity:
+                  description: 'BPFMapSizeNATAffinity in BPF mode, controls the size
+                    of the NAT affinity map. [Default: 1048576]'
+                  type: integer
+                bpfMapSizeNATBackend:
+                  description: 'BPFMapSizeNATBackend in BPF mode, controls the size
+                    of the NAT backend map. [Default: 65536]'
+                  type: integer
+                bpfMapSizeNATFrontend:
+                  description: 'BPFMapSizeNATFrontend in BPF mode, controls the size
+                    of the NAT frontend map. [Default: 65536]'
+                  type: integer
+                bpfMapSizeRoute:
+                  description: 'BPFMapSizeRoute in BPF mode, controls the size of
+                    the routes map. [Default: 65536]'
+                  type: integer
+                bpfPSNATPorts:
+                  description: 'BPFPSNATPorts sets the range of ports that are used
+                    for port mapping when doing SNAT in BPF mode. The range is inclusive.
+                    [Default: 30000-40000]'
+                  type: string
+                bpfPolicyDebugEnabled:
+                  description: BPFPolicyDebugEnabled when in BPF mode, Felix records
+                    extra information about packets that are dropped by policy.
+                  type: boolean
+                chainInsertMode:
+                  description: 'ChainInsertMode controls whether Felix inserts rules
+                    at the top of iptables chains, or appends to them. "Insert" is
+                    the safe default since it prevents rules created by other applications
+                    from interfering with Calico''s. "Append" is a performance optimization
+                    for workloads that don''t need Calico''s security, and it may be
+                    incompatible with some other applications. [Default: Insert]'
+                  type: string
+                dataplaneDriver:
+                  type: string
+                dataplaneWatchdogTimeout:
+                  description: 'DataplaneWatchdogTimeout is the timeout for the dataplane
+                    watchdog. A value of 0 disables the watchdog. [Default: 90s]'
+                  type: string
+                defaultEndpointToHostAction:
+                  description: 'DefaultEndpointToHostAction controls what happens
+                    to traffic that goes from a workload endpoint to the host itself.
+                    One of "Accept", "Drop", "Return". [Default: Accept]'
+                  type: string
+                deviceRouteProtocol:
+                  description: This defines the protocol used by Felix to install
+                    routes to the dataplane.
+                  type: integer
+                deviceRouteSourceAddress:
+                  description: This is the source address to use on programmed device
+                    routes.
+                  type: string
+                disableConntrackInvalidCheck:
+                  type: boolean
+                endpointReportingDelay:
+                  type: string
+                endpointReportingEnabled:
+                  type: boolean
+                externalNodesList:
+                  description: 'ExternalNodesList is a list of CIDRs of nodes that
+                    are not part of the cluster. This is used to configure SNAT for
+                    traffic from workloads to these nodes. [Default: empty]'
+                  items:
+                    type: string
+                  type: array
+                failsafeInboundHostPorts:
+                  description: 'FailsafeInboundHostPorts is a list of TCP ports that
+                    Felix will allow incoming traffic to on the host. This is useful
+                    to allow remote access to the host, e.g. for SSH. [Default: tcp:22,
+                    udp:68, tcp:179, tcp:2379, tcp:2380, tcp:6443, tcp:6666, tcp:6667]'
+                  items:
+                    description: ProtoPort is combination of protocol and port, both
+                      must be specified.
+                    properties:
+                      port:
+                        type: integer
+                      protocol:
+                        type: string
+                    required:
+                      - port
+                      - protocol
+                    type: object
+                  type: array
+                failsafeOutboundHostPorts:
+                  description: 'FailsafeOutboundHostPorts is a list of TCP ports that
+                    Felix will allow outgoing traffic from the host. This is useful
+                    to allow the host to contact remote services, e.g. for DNS. [Default:
+                    udp:53, udp:67, tcp:179, tcp:2379, tcp:2380, tcp:6443, tcp:6666,
+                    tcp:6667]'
+                  items:
+                    description: ProtoPort is combination of protocol and port, both
+                      must be specified.
+                    properties:
+                      port:
+                        type: integer
+                      protocol:
+        type: string
+                    required:
+                      - port
+                      - protocol
+                    type: object
+                  type: array
+                featureDetectOverride:
+                  description: 'FeatureDetectOverride is a set of key-value pairs
+                    that override the feature detection logic. For example, to force
+                    a feature to be disabled, set the value to "disabled". To force
+                    a feature to be enabled, set the value to "enabled".'
+                  type: string
+                floatingIPs:
+                  description: 'FloatingIPs is a list of floating IPs that should
+                    be configured on the nodes. [Default: empty]'
+                  enum:
+                    - Enabled
+                    - Disabled
+                  type: string
+                genericXDPEnabled:
+                  description: 'GenericXDPEnabled enables Generic XDP so that XDP
+                    programs can be attached to any kind of interface. [Default: false]'
+                  type: boolean
+                healthEnabled:
+                  type: boolean
+                healthHost:
+                  type: string
+                healthPort:
+                  type: integer
+                interfaceExclude:
+                  description: 'InterfaceExclude is a list of interface names to exclude
+                    from consideration. This is useful if you have interfaces that
+                    you do not want Calico to manage. [Default: empty]'
+                  items:
+                    type: string
+                  type: array
+                interfacePrefix:
+                  description: 'InterfacePrefix is the interface name prefix to use
+                    for workload interfaces. [Default: cali]'
+                  type: string
+                interfaceRefreshInterval:
+                  description: 'InterfaceRefreshInterval is the interval at which
+                    Felix refreshes its interface state. [Default: 10s]'
+                  type: string
+                ipipEnabled:
+                  description: 'IPIPEnabled enables IPIP encapsulation for traffic
+                    between nodes. [Default: true]'
+                  type: boolean
+                ipipMTU:
+                  description: 'IPIPMTU is the MTU to use for IPIP tunnels. [Default:
+                    1440]'
+                  type: integer
+                iptablesBackend:
+                  description: 'IptablesBackend specifies which backend of iptables
+                    will be used. Can be "Legacy" or "NFT". "Auto" will default to
+                    "Legacy" for backwards compatibility. [Default: Auto]'
+                  enum:
+                    - Legacy
+                    - NFT
+                    - Auto
+                  type: string
+                iptablesFilterAllowAction:
+                  type: string
+                iptablesLockFilePath:
+                  description: 'IptablesLockFilePath is the path to the iptables lock
+                    file. [Default: /run/xtables.lock]'
+                  type: string
+                iptablesLockProbeInterval:
+                  description: 'IptablesLockProbeInterval is the interval at which
+                    Felix probes for the iptables lock. [Default: 50ms]'
+                  type: string
+                iptablesLockTimeout:
+                  description: 'IptablesLockTimeout is the timeout for acquiring the
+                    iptables lock. [Default: 15s]'
+                  type: string
+                iptablesMangleAllowAction:
+                  type: string
+                iptablesMarkMask:
+                  description: 'IptablesMarkMask is the mask that Felix uses for its
+                    iptables marks. [Default: 0xff000000]'
+                  type: integer
+                iptablesNATOutgoingInterfaceFilter:
+                  type: string
+                iptablesPostWriteLockTimeout:
+                  description: 'IptablesPostWriteLockTimeout is the timeout for releasing
+                    the iptables lock. [Default: 1s]'
+                  type: string
+                iptablesRefreshInterval:
+                  description: 'IptablesRefreshInterval is the interval at which Felix
+                    refreshes its iptables state. [Default: 90s]'
+                  type: string
+                ipv6Support:
+                  description: 'IPv6Support enables IPv6 support. [Default: false]'
+                  type: boolean
+                kubeNodePortRanges:
+                  description: 'KubeNodePortRanges holds list of port ranges used
+                    for NodePort services. [Default: 30000:32767].'
+                  items:
+                    type: string
+                  type: array
+                logDebugFilenameRegex:
+                  description: 'LogDebugFilenameRegex is a regular expression that
+                    controls which file names are logged at debug level. [Default:
+                    empty]'
+                  type: string
+                logFilePath:
+                  description: 'LogFilePath is the path to the Felix log file. [Default:
+                    /var/log/calico/felix.log]'
+                  type: string
+                logPrefix:
+                  description: 'LogPrefix is the log prefix to use. [Default: empty]'
+                  type: string
+                logSeverityFile:
+                  description: 'LogSeverityFile is the log severity for the log file.
+                    One of "Debug", "Info", "Warning", "Error", "Fatal". [Default:
+                    Info]'
+                  type: string
+                logSeverityScreen:
+                  description: 'LogSeverityScreen is the log severity for the screen.
+                    One of "Debug", "Info", "Warning", "Error", "Fatal". [Default:
+                    Info]'
+                  type: string
+                logSeveritySyslog:
+                  description: 'LogSeveritySyslog is the log severity for syslog.
+                    One of "Debug", "Info", "Warning", "Error", "Fatal". [Default:
+                    Info]'
+                  type: string
+                maxIpsetSize:
+                  type: integer
+                metadataAddr:
+                  description: 'MetadataAddr is the IP address of the metadata service.
+                    [Default: 169.254.169.254]'
+                  type: string
+                metadataPort:
+                  description: 'MetadataPort is the port of the metadata service.
+                    [Default: 80]'
+                  type: integer
+                natOutgoingAddress:
+                  description: NATOutgoingAddress is the address to use for SNATing
+                    traffic from workloads to the internet.
+                  type: string
+                natPortRange:
+                  description: 'NATPortRange is the range of ports to use for SNAT.
+                    [Default: 30000:32767]'
+                  type: string
+                netlinkTimeout:
+                  description: 'NetlinkTimeout is the timeout for netlink operations.
+                    [Default: 10s]'
+                  type: string
+                openstackRegion:
+                  description: OpenstackRegion is the name of the OpenStack region.
+                  type: string
+                policySyncPathPrefix:
+                  description: 'PolicySyncPathPrefix is the path to the policy sync
+                    directory. [Default: /var/run/nodeagent]'
+                  type: string
+                prometheusGoMetricsEnabled:
+                  description: 'PrometheusGoMetricsEnabled enables Go runtime metrics.
+                    [Default: true]'
+                  type: boolean
+                prometheusMetricsEnabled:
+                  description: 'PrometheusMetricsEnabled enables the Prometheus metrics
+                    server. [Default: false]'
+                  type: boolean
+                prometheusMetricsHost:
+                  description: 'PrometheusMetricsHost is the host to bind the Prometheus
+                    metrics server to. [Default: 0.0.0.0]'
+                  type: string
+                prometheusMetricsPort:
+                  description: 'PrometheusMetricsPort is the port to bind the Prometheus
+                    metrics server to. [Default: 9091]'
+                  type: integer
+                prometheusProcessMetricsEnabled:
+                  description: 'PrometheusProcessMetricsEnabled enables process metrics.
+                    [Default: true]'
+                  type: boolean
+                removeExternalRoutes:
+                  description: 'RemoveExternalRoutes controls whether Felix removes
+                    routes to external networks that are not managed by Calico. [Default:
+                    true]'
+                  type: boolean
+                reportingInterval:
+                  description: 'ReportingInterval is the interval at which Felix
+                    reports its status. [Default: 30s]'
+                  type: string
+                reportingTTL:
+                  description: 'ReportingTTL is the TTL for status reports. [Default:
+                    90s]'
+                  type: string
+                routeRefreshInterval:
+                  description: 'RouteRefreshInterval is the interval at which Felix
+                    refreshes its routing table. [Default: 90s]'
+                  type: string
+                routeSource:
+                  description: 'RouteSource is the source of the routes that Felix
+                    installs. [Default: CalicoIPAM]'
+                  type: string
+                routeSyncDisabled:
+                  description: 'RouteSyncDisabled disables route synchronization.
+                    [Default: false]'
+                  type: boolean
+                routingTableGracePeriod:
+                  description: 'RoutingTableGracePeriod is the time to wait before
+                    flushing the routing table after a restart. [Default: 0s]'
+                  type: string
+                routingTableUpdateInterval:
+                  description: 'RoutingTableUpdateInterval is the interval at which
+                    Felix updates the routing table. [Default: 10s]'
+                  type: string
+                sidecarAccelerationEnabled:
+                  description: 'SidecarAccelerationEnabled enables sidecar acceleration.
+                    [Default: false]'
+                  type: boolean
+                usageReportingEnabled:
+                  description: 'UsageReportingEnabled enables usage reporting. [Default:
+                    true]'
+                  type: boolean
+                usageReportingInitialDelay:
+                  description: 'UsageReportingInitialDelay is the initial delay before
+                    starting usage reporting. [Default: 300s]'
+                  type: string
+                usageReportingInterval:
+                  description: 'UsageReportingInterval is the interval at which usage
+                    is reported. [Default: 86400s]'
+                  type: string
+                useNodeHostname:
+                  description: 'UseNodeHostname enables using the node''s hostname
+                    instead of its IP address for identification. [Default: false]'
+                  type: boolean
+                vxlanEnabled:
+                  description: 'VXLANEnabled enables VXLAN encapsulation for traffic
+                    between nodes. [Default: false]'
+                  type: boolean
+                vxlanMTU:
+                  description: 'VXLANMTU is the MTU to use for VXLAN tunnels. [Default:
+                    1410]'
+                  type: integer
+                vxlanPort:
+                  description: 'VXLANPort is the port to use for VXLAN tunnels. [Default:
+                    4789]'
+                  type: integer
+                vxlanVNI:
+                  description: 'VXLANVNI is the VNI to use for VXLAN tunnels. [Default:
+                    4096]'
+                  type: integer
+                wireguardEnabled:
+                  description: 'WireguardEnabled enables Wireguard encryption for
+                    traffic between nodes. [Default: false]'
+                  type: boolean
+                wireguardHostEncryptionEnabled:
+                  description: 'WireguardHostEncryptionEnabled enables Wireguard
+                    encryption for host traffic. [Default: false]'
+                  type: boolean
+                wireguardInterfaceName:
+                  description: 'WireguardInterfaceName is the name of the Wireguard
+                    interface. [Default: wireguard.cali]'
+                  type: string
+                wireguardKeepAlive:
+                  description: 'WireguardKeepAlive is the keepalive interval for Wireguard
+                    peers. [Default: 0s]'
+                  type: string
+                wireguardListeningPort:
+                  description: 'WireguardListeningPort is the port that Wireguard
+                    listens on. [Default: 51820]'
+                  type: integer
+                wireguardMTU:
+                  description: 'WireguardMTU is the MTU to use for the Wireguard interface.
+                    [Default: 1440]'
+                  type: integer
+                wireguardRoutingRulePriority:
+                  description: 'WireguardRoutingRulePriority is the priority of the
+                    Wireguard routing rule. [Default: 99]'
+                  type: integer
+                workloadSourceSpoofing:
+                  description: 'WorkloadSourceSpoofing controls whether Felix allows
+                    workloads to spoof their source IP address. [Default: "Any"]'
+                  type: string
+                xdpEnabled:
+                  description: 'XDPEnabled enables XDP acceleration for policies.
+                    [Default: true]'
+                  type: boolean
+                xdpRefreshInterval:
+                  description: 'XDPRefreshInterval is the interval at which Felix
+                    refreshes its XDP state. [Default: 90s]'
+                  type: string
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: globalnetworkpolicies.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: GlobalNetworkPolicy
+    listKind: GlobalNetworkPolicyList
+    plural: globalnetworkpolicies
+    singular: globalnetworkpolicy
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: GlobalNetworkPolicy contains information about a security policy
+            that is to be enforced by Calico globally.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: 'GlobalNetworkPolicySpec contains the specification for
+                an GlobalNetworkPolicy resource.
+
+                Note: Not all fields in this spec are supported by all versions of
+                Calico.'
+              properties:
+                applyOnForward:
+                  description: 'ApplyOnForward indicates to apply the rules in this
+                    policy on forward traffic. [Default: false]'
+                  type: boolean
+                doNotTrack:
+                  description: 'DoNotTrack indicates that packets matched by the rules
+                    in this policy should not be sent to conntrack. [Default: false]'
+                  type: boolean
+                egress:
+                  description: The ordered set of egress rules. Each rule contains
+                    a set of packet matching criteria and a corresponding action to
+                    apply.
+                  items:
+                    description: 'A Rule encapsulates a set of match criteria and
+                      an action. Both selector-based security Policy and security
+                      Profiles reference rules - separated out as a list of rules
+                      for organizational purposes.
+
+                      Each rule contains a set of packet matching criteria and a corresponding
+                      action to apply.'
+                    properties:
+                      action:
+                        type: string
+                      destination:
+                        description: Destination contains the match criteria for the
+                          destination of a packet.
+                        properties:
+                          namespaceSelector:
+                            description: 'NamespaceSelector is a label selector which
+                              selects the namespaces to which this rule applies. This
+                              field is not enforced by Calico V1 policies. This field
+                              is only valid for NetworkPolicy.'
+                            type: string
+                          nets:
+                            items:
+                              type: string
+                            type: array
+                          notNets:
+                            items:
+                              type: string
+                            type: array
+                          notPorts:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          notSelector:
+                            type: string
+                          ports:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          selector:
+                            type: string
+                          serviceAccounts:
+                            description: ServiceAccounts is a list of service accounts
+                              to match.
+                            properties:
+                              names:
+                                items:
+                                  type: string
+                                type: array
+                              selector:
+                                type: string
+                            type: object
+                          services:
+                            description: 'Services is a list of services to match.
+                              This field is not supported in Calico V1 policies. This
+                              field is only valid for NetworkPolicy.'
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            type: object
+                        type: object
+                      http:
+                        description: HTTP contains the match criteria for HTTP requests.
+                        properties:
+                          methods:
+                            items:
+                              type: string
+                            type: array
+                          paths:
+                            items:
+                              description: 'HTTPPath specifies an HTTP path to match.
+                                It may be either a literal path or a regular expression.
+                                If it is a literal path, it must begin with a ''/''.'
+                              properties:
+                                exact:
+                                  type: string
+                                prefix:
+                                  type: string
+                                regex:
+                                  type: string
+                              type: object
+                            type: array
+                        type: object
+                      icmp:
+                        description: ICMP is a list of ICMP match criteria.
+                        properties:
+                          code:
+                            type: integer
+                          type:
+                            type: integer
+                        type: object
+                      ipVersion:
+                        type: integer
+                      metadata:
+                        description: Metadata contains additional information for
+                          this rule
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        type: object
+                      notICMP:
+                        description: NotICMP is a list of ICMP match criteria that
+                          are negated.
+                        properties:
+                          code:
+                            type: integer
+                          type:
+                            type: integer
+                        type: object
+                      notProtocol:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^.*
+                        x-kubernetes-int-or-string: true
+                      protocol:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^.*
+                        x-kubernetes-int-or-string: true
+                      source:
+                        description: Source contains the match criteria for the source
+                          of a packet.
+                        properties:
+                          namespaceSelector:
+                            type: string
+                          nets:
+                            items:
+                              type: string
+                            type: array
+                          notNets:
+                            items:
+                              type: string
+                            type: array
+                          notPorts:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          notSelector:
+                            type: string
+                          ports:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          selector:
+                            type: string
+                          serviceAccounts:
+                            properties:
+                              names:
+                                items:
+                                  type: string
+                                type: array
+                              selector:
+                                type: string
+                            type: object
+                          services:
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                      - action
+                    type: object
+                  type: array
+                ingress:
+                  description: The ordered set of ingress rules. Each rule contains
+                    a set of packet matching criteria and a corresponding action to
+                    apply.
+                  items:
+                    description: 'A Rule encapsulates a set of match criteria and
+                      an action. Both selector-based security Policy and security
+                      Profiles reference rules - separated out as a list of rules
+                      for organizational purposes.
+
+                      Each rule contains a set of packet matching criteria and a corresponding
+                      action to apply.'
+                    properties:
+                      action:
+                        type: string
+                      destination:
+                        description: Destination contains the match criteria for the
+                          destination of a packet.
+                        properties:
+                          namespaceSelector:
+                            description: 'NamespaceSelector is a label selector which
+                              selects the namespaces to which this rule applies. This
+                              field is not enforced by Calico V1 policies. This field
+                              is only valid for NetworkPolicy.'
+                            type: string
+                          nets:
+                            items:
+                              type: string
+                            type: array
+                          notNets:
+                            items:
+                              type: string
+                            type: array
+                          notPorts:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          notSelector:
+                            type: string
+                          ports:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          selector:
+                            type: string
+                          serviceAccounts:
+                            description: ServiceAccounts is a list of service accounts
+                              to match.
+                            properties:
+                              names:
+                                items:
+                                  type: string
+                                type: array
+                              selector:
+                                type: string
+                            type: object
+                          services:
+                            description: 'Services is a list of services to match.
+                              This field is not supported in Calico V1 policies. This
+                              field is only valid for NetworkPolicy.'
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            type: object
+                        type: object
+                      http:
+                        description: HTTP contains the match criteria for HTTP requests.
+                        properties:
+                          methods:
+                            items:
+                              type: string
+                            type: array
+                          paths:
+                            items:
+                              description: 'HTTPPath specifies an HTTP path to match.
+                                It may be either a literal path or a regular expression.
+                                If it is a literal path, it must begin with a ''/''.'
+                              properties:
+                                exact:
+                                  type: string
+                                prefix:
+                                  type: string
+                                regex:
+                                  type: string
+                              type: object
+                            type: array
+                        type: object
+                      icmp:
+                        description: ICMP is a list of ICMP match criteria.
+                        properties:
+                          code:
+                            type: integer
+                          type:
+                            type: integer
+                        type: object
+                      ipVersion:
+                        type: integer
+                      metadata:
+                        description: Metadata contains additional information for
+                          this rule
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        type: object
+                      notICMP:
+                        description: NotICMP is a list of ICMP match criteria that
+                          are negated.
+                        properties:
+                          code:
+                            type: integer
+                          type:
+                            type: integer
+                        type: object
+                      notProtocol:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^.*
+                        x-kubernetes-int-or-string: true
+                      protocol:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^.*
+                        x-kubernetes-int-or-string: true
+                      source:
+                        description: Source contains the match criteria for the source
+                          of a packet.
+                        properties:
+                          namespaceSelector:
+                            type: string
+                          nets:
+                            items:
+                              type: string
+                            type: array
+                          notNets:
+                            items:
+                              type: string
+                            type: array
+                          notPorts:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          notSelector:
+                            type: string
+                          ports:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          selector:
+                            type: string
+                          serviceAccounts:
+                            properties:
+                              names:
+                                items:
+                                  type: string
+                                type: array
+                              selector:
+                                type: string
+                            type: object
+                          services:
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                      - action
+                    type: object
+                  type: array
+                namespaceSelector:
+                  description: 'A label selector which selects the namespaces to which
+                    this policy applies. This field is not valid for GlobalNetworkPolicy.
+                    [Default: all()]'
+                  type: string
+                order:
+                  description: Order is an optional field that specifies the order
+                    in which the policy is applied. Policies with smaller order values
+                    are applied before policies with larger order values.
+                  type: number
+                preDNAT:
+                  description: 'PreDNAT indicates to apply the rules in this policy
+                    before any DNAT. [Default: false]'
+                  type: boolean
+                selector:
+                  description: 'The selector is an expression used to pick pick out
+                    the endpoints that the policy should be applied to.
+
+                    Selector expressions follow this syntax:
+
+                    `label == "value"` - selects all endpoints with a label called `label`
+                    that has the value `value`.
+
+                    `label != "value"` - selects all endpoints with a label called `label`
+                    that does not have the value `value`.
+
+                    `label in { "value1", "value2" }` - selects all endpoints with a
+                    label called `label` that has a value in the list of values.
+
+                    `label not in { "value1", "value2" }` - selects all endpoints
+                    with a label called `label` that does not have a value in the list
+                    of values.
+
+                    `has(label)` - selects all endpoints that have a label called `label`.
+
+                    `!has(label)` - selects all endpoints that do not have a label
+                    called `label`.
+
+                    `"all()"` - selects all endpoints.
+
+                    `"none()"` - selects no endpoints.
+
+                    Multiple expressions can be combined with `&&` and `||`. For example:
+
+                    `label1 == "value1" && label2 == "value2"`
+
+                    `label1 == "value1" || has(label2)`
+
+                    The selector can be left empty, in which case it is treated as
+                    "all()".'
+                  type: string
+                serviceAccountSelector:
+                  description: 'ServiceAccountSelector is a label selector which selects
+                    the service accounts to which this policy applies. This field
+                    is not valid for GlobalNetworkPolicy.'
+                  type: string
+                tier:
+                  description: 'Tier specifies the tier that this policy belongs to.
+                    If not specified, this policy is default-ordered with other policies
+                    that have no tier specified. [Default: default]'
+                  type: string
+                types:
+                  description: 'Types indicates whether this policy applies to ingress,
+                    egress, or both. When not explicitly specified (and so the value
+                    on creation is empty or nil), Calico defaults an egress-only policy
+                    to just ["Egress"] and an ingress-only policy to just ["Ingress"].
+                    If the policy contains both ingress and egress rules, then this
+                    field will be defaulted to ["Ingress", "Egress"]. This field is
+                    required for all policies created with Calico''s V3 API.'
+                  items:
+                    type: string
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: globalnetworksets.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: GlobalNetworkSet
+    listKind: GlobalNetworkSetList
+    plural: globalnetworksets
+    singular: globalnetworkset
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: GlobalNetworkSet contains a set of arbitrary IP addresses/CIDRs
+            that can be used in Calico GlobalNetworkPolicy or NetworkPolicy.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: GlobalNetworkSetSpec contains the specification for a GlobalNetworkSet
+                resource.
+              properties:
+                nets:
+                  description: The list of IP networks that belong to this set.
+                  items:
+                    type: string
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: hostendpoints.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: HostEndpoint
+    listKind: HostEndpointList
+    plural: hostendpoints
+    singular: hostendpoint
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: HostEndpoint contains information about a "bare-metal" interface
+            on a Calico-networked host.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: HostEndpointSpec contains the specification for a HostEndpoint
+                resource.
+              properties:
+                expectedIPs:
+                  description: 'The expected IP addresses (IPv4 and IPv6) of the endpoint.
+                    If this HostEndpoint represents a host interface, then these are
+                    the IPs of that interface. If this represents a workload endpoint,
+                    then this is the IP of the workload. If the endpoint is part of
+                    a BGP network, the expected IPs can be used to announce the IPs
+                    of the endpoint to the BGP network. [Default: empty]'
+                  items:
+                    type: string
+                  type: array
+                interfaceName:
+                  description: 'The name of the interface on the host. If this is not
+                    specified, the HostEndpoint is assumed to be a workload endpoint.
+                    If this is specified, it must be a valid Linux interface name.
+                    [Default: empty]'
+                  type: string
+                node:
+                  description: 'The node name identifying the Calico node instance.
+                    This is required for host endpoints. [Default: empty]'
+                  type: string
+                ports:
+                  description: Ports contains the list of ports that should be exposed
+                    on the host.
+                  items:
+                    properties:
+                      name:
+                        type: string
+                      port:
+                        type: integer
+                      protocol:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^.*
+                        x-kubernetes-int-or-string: true
+                    required:
+                      - name
+                      - port
+                      - protocol
+                    type: object
+                  type: array
+                profiles:
+                  description: A list of profile IDs to apply to the endpoint.
+                  items:
+                    type: string
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ipamblocks.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: IPAMBlock
+    listKind: IPAMBlockList
+    plural: ipamblocks
+    singular: ipamblock
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: IPAMBlockSpec contains the specification for an IPAMBlock
+                resource.
+              properties:
+                affinity:
+                  type: string
+                allocations:
+                  items:
+                    type: integer
+                    # TODO: This should be a pointer to an integer.
+                  type: array
+                attributes:
+                  items:
+                    properties:
+                      handle_id:
+                        type: string
+                      secondary:
+                        additionalProperties:
+                          type: string
+                        type: object
+                    type: object
+                  type: array
+                cidr:
+                  type: string
+                deleted:
+                  type: boolean
+                sequenceNumber:
+                  format: int64
+                  type: integer
+                sequenceNumberForDeletion:
+                  format: int64
+                  type: integer
+                strictAffinity:
+                  type: boolean
+                unallocated:
+                  items:
+                    type: integer
+                  type: array
+              required:
+                - affinity
+                - allocations
+                - attributes
+                - cidr
+                - deleted
+                - strictAffinity
+                - unallocated
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ipamconfigs.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: IPAMConfig
+    listKind: IPAMConfigList
+    plural: ipamconfigs
+    singular: ipamconfig
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: IPAMConfigSpec contains the specification for an IPAMConfig
+                resource.
+              properties:
+                autoAllocateBlocks:
+                  type: boolean
+                maxBlocksPerHost:
+                  description: MaxBlocksPerHost, if non-zero, is the max number of
+                    blocks that can be affine to each host.
+                  type: integer
+                strictAffinity:
+                  type: boolean
+              required:
+                - autoAllocateBlocks
+                - strictAffinity
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ipamhandles.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: IPAMHandle
+    listKind: IPAMHandleList
+    plural: ipamhandles
+    singular: ipamhandle
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: IPAMHandleSpec contains the specification for an IPAMHandle
+                resource.
+              properties:
+                block:
+                  additionalProperties:
+                    type: integer
+                  type: object
+                deleted:
+                  type: boolean
+                handleID:
+                  type: string
+              required:
+                - block
+                - handleID
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ippools.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: IPPool
+    listKind: IPPoolList
+    plural: ippools
+    singular: ippool
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: IPPool contains information about a specific IP address pool.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: IPPoolSpec contains the specification for an IPPool resource.
+              properties:
+                allowedUses:
+                  description: 'AllowedUse controls what the IP addresses in this
+                    pool can be used for.  If not specified or empty, IPs in this
+                    pool can be used for any use. [Default: empty]'
+                  items:
+                    type: string
+                  type: array
+                blockSize:
+                  description: The block size to use for IP address assignments from
+                    this pool. Defaults to 26 for IPv4 and 122 for IPv6.
+                  type: integer
+                cidr:
+                  description: The pool CIDR.
+                  type: string
+                disableBGPExport:
+                  description: 'Disable BGP export of routes from this IP pool. [Default:
+                    false]'
+                  type: boolean
+                disabled:
+                  description: 'When disabled is true, Calico IPAM will not assign
+                    addresses from this pool. [Default: false]'
+                  type: boolean
+                ipipMode:
+                  description: 'Mode for IPIP encapsulation. See https://projectcalico.docs.tigera.io/networking/ipip
+                    for more details. [Default: Never]'
+                  enum:
+                    - Always
+                    - CrossSubnet
+                    - Never
+                  type: string
+                natOutgoing:
+                  description: 'When nat-outgoing is true, IP addresses from this
+                    pool are used for SNAT. [Default: false]'
+                  type: boolean
+                nodeSelector:
+                  description: 'Allows IPPool to be tied to specific nodes. If specified,
+                    only nodes with labels matching this selector can allocate IPs
+                    from this pool. [Default: all()]'
+                  type: string
+                vxlanMode:
+                  description: 'Mode for VXLAN encapsulation. See https://projectcalico.docs.tigera.io/networking/vxlan
+                    for more details. [Default: Never]'
+                  enum:
+                    - Always
+                    - CrossSubnet
+                    - Never
+                  type: string
+              required:
+                - cidr
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: ipreservations.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: IPReservation
+    listKind: IPReservationList
+    plural: ipreservations
+    singular: ipreservation
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: IPReservation contains information about a specific IP address
+            reservation.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: IPReservationSpec contains the specification for an IPReservation
+                resource.
+              properties:
+                reservedCIDRs:
+                  description: ReservedCIDRs is a list of CIDRs and/or IP addresses
+                    that are reserved for a specific use.
+                  items:
+                    type: string
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: kubecontrollersconfigurations.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: KubeControllersConfiguration
+    listKind: KubeControllersConfigurationList
+    plural: kubecontrollersconfigurations
+    singular: kubecontrollersconfiguration
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: KubeControllersConfiguration contains the configuration for
+            the Calico Kubernetes controllers.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: KubeControllersConfigurationSpec contains the values of
+                the Kubernetes controllers configuration.
+              properties:
+                controllers:
+                  description: Controllers enables and configures individual Kubernetes
+                    controllers.
+                  properties:
+                    namespace:
+                      description: Namespace enables and configures the namespace
+                        controller. Enabled by default, set to nil to disable.
+                      properties:
+                        reconcilerPeriod:
+                          description: 'ReconcilerPeriod is the period to perform
+                            a full resync of namespace resources. [Default: 5m]'
+                          type: string
+                      type: object
+                    node:
+                      description: Node enables and configures the node controller.
+                        Enabled by default, set to nil to disable.
+                      properties:
+                        hostEndpoint:
+                          description: HostEndpoint enables and configures the hostendpoint
+                            controller. Enabled by default, set to nil to disable.
+                          properties:
+                            autoCreate:
+                              description: 'AutoCreate enables automatic creation
+                                of HostEndpoint resources. [Default: Disabled]'
+                              enum:
+                                - Enabled
+                                - Disabled
+                              type: string
+                          type: object
+                        leakGracePeriod:
+                          description: 'LeakGracePeriod is the period to wait before
+                            considering a node''s IP addresses to be leaked. [Default:
+                            15m]'
+                          type: string
+                        reconcilerPeriod:
+                          description: 'ReconcilerPeriod is the period to perform
+                            a full resync of node resources. [Default: 5m]'
+                          type: string
+                        syncLabels:
+                          description: 'SyncLabels controls whether to sync labels
+                            from the Kubernetes node to the Calico node. [Default:
+                            Enabled]'
+                          enum:
+                            - Enabled
+                            - Disabled
+                          type: string
+                      type: object
+                    policy:
+                      description: Policy enables and configures the policy controller.
+                        Enabled by default, set to nil to disable.
+                      properties:
+                        reconcilerPeriod:
+                          description: 'ReconcilerPeriod is the period to perform
+                            a full resync of policy resources. [Default: 5m]'
+                          type: string
+                      type: object
+                    serviceAccount:
+                      description: ServiceAccount enables and configures the service
+                        account controller. Enabled by default, set to nil to disable.
+                      properties:
+                        reconcilerPeriod:
+                          description: 'ReconcilerPeriod is the period to perform
+                            a full resync of service account resources. [Default: 5m]'
+                          type: string
+                      type: object
+                    workloadEndpoint:
+                      description: WorkloadEndpoint enables and configures the workload
+                        endpoint controller. Enabled by default, set to nil to disable.
+                      properties:
+                        reconcilerPeriod:
+                          description: 'ReconcilerPeriod is the period to perform
+                            a full resync of workload endpoint resources. [Default:
+                            5m]'
+                          type: string
+                      type: object
+                  type: object
+                etcdV3CompactionPeriod:
+                  description: 'EtcdV3CompactionPeriod is the period between etcdv3
+                    compaction requests. [Default: 10m]'
+                  type: string
+                healthChecks:
+                  description: 'HealthChecks enables or disables support for health
+                    checks. [Default: Enabled]'
+                  enum:
+                    - Enabled
+                    - Disabled
+                  type: string
+                logSeverityScreen:
+                  description: 'LogSeverityScreen is the log severity above which
+                    logs are sent to the stdout. [Default: Info]'
+                  type: string
+                prometheusMetricsPort:
+                  description: 'PrometheusMetricsPort is the port to expose Prometheus
+                    metrics on. [Default: 9094]'
+                  type: integer
+              required:
+                - controllers
+              type: object
+            status:
+              description: KubeControllersConfigurationStatus defines the observed
+                state of KubeControllersConfiguration
+              properties:
+                environmentVaries:
+                  description: EnvironmentVaries is a map of environment variables
+                    and their values.
+                  type: string
+                runningConfig:
+                  description: RunningConfig is the configuration that is currently
+                    in use.
+                  properties:
+                    controllers:
+                      description: Controllers enables and configures individual Kubernetes
+                        controllers.
+                      properties:
+                        namespace:
+                          description: Namespace enables and configures the namespace
+                            controller. Enabled by default, set to nil to disable.
+                          properties:
+                            reconcilerPeriod:
+                              description: 'ReconcilerPeriod is the period to perform
+                                a full resync of namespace resources. [Default: 5m]'
+                              type: string
+                          type: object
+                        node:
+                          description: Node enables and configures the node controller.
+                            Enabled by default, set to nil to disable.
+                          properties:
+                            hostEndpoint:
+                              description: HostEndpoint enables and configures the
+                                hostendpoint controller. Enabled by default, set to
+                                nil to disable.
+                              properties:
+                                autoCreate:
+                                  description: 'AutoCreate enables automatic creation
+                                    of HostEndpoint resources. [Default: Disabled]'
+                                  enum:
+                                    - Enabled
+                                    - Disabled
+                                  type: string
+                              type: object
+                            leakGracePeriod:
+                              description: 'LeakGracePeriod is the period to wait
+                                before considering a node''s IP addresses to be leaked.
+                                [Default: 15m]'
+                              type: string
+                            reconcilerPeriod:
+                              description: 'ReconcilerPeriod is the period to perform
+                                a full resync of node resources. [Default: 5m]'
+                              type: string
+                            syncLabels:
+                              description: 'SyncLabels controls whether to sync labels
+                                from the Kubernetes node to the Calico node. [Default:
+                                Enabled]'
+                              enum:
+                                - Enabled
+                                - Disabled
+                              type: string
+                          type: object
+                        policy:
+                          description: Policy enables and configures the policy controller.
+                            Enabled by default, set to nil to disable.
+                          properties:
+                            reconcilerPeriod:
+                              description: 'ReconcilerPeriod is the period to perform
+                                a full resync of policy resources. [Default: 5m]'
+                              type: string
+                          type: object
+                        serviceAccount:
+                          description: ServiceAccount enables and configures the service
+                            account controller. Enabled by default, set to nil to
+                            disable.
+                          properties:
+                            reconcilerPeriod:
+                              description: 'ReconcilerPeriod is the period to perform
+                                a full resync of service account resources. [Default:
+                                5m]'
+                              type: string
+                          type: object
+                        workloadEndpoint:
+                          description: WorkloadEndpoint enables and configures the
+                            workload endpoint controller. Enabled by default, set
+                            to nil to disable.
+                          properties:
+                            reconcilerPeriod:
+                              description: 'ReconcilerPeriod is the period to perform
+                                a full resync of workload endpoint resources. [Default:
+                                5m]'
+                              type: string
+                          type: object
+                      type: object
+                    etcdV3CompactionPeriod:
+                      description: 'EtcdV3CompactionPeriod is the period between etcdv3
+                        compaction requests. [Default: 10m]'
+                      type: string
+                    healthChecks:
+                      description: 'HealthChecks enables or disables support for health
+                        checks. [Default: Enabled]'
+                      enum:
+                        - Enabled
+                        - Disabled
+                      type: string
+                    logSeverityScreen:
+                      description: 'LogSeverityScreen is the log severity above which
+                        logs are sent to the stdout. [Default: Info]'
+                      type: string
+                    prometheusMetricsPort:
+                      description: 'PrometheusMetricsPort is the port to expose Prometheus
+                        metrics on. [Default: 9094]'
+                      type: integer
+                  required:
+                    - controllers
+                  type: object
+              type: object
+          type: object
+      served: true
+      storage: true
+      subresources:
+        status: {}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: networkpolicies.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: NetworkPolicy
+    listKind: NetworkPolicyList
+    plural: networkpolicies
+    singular: networkpolicy
+  preserveUnknownFields: false
+  scope: Namespaced
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: NetworkPolicy contains information about a security policy
+            that is to be enforced by Calico.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: 'NetworkPolicySpec contains the specification for a NetworkPolicy
+                resource.
+
+                Note: Not all fields in this spec are supported by all versions of
+                Calico.'
+              properties:
+                doNotTrack:
+                  description: 'DoNotTrack indicates that packets matched by the rules
+                    in this policy should not be sent to conntrack. [Default: false]'
+                  type: boolean
+                egress:
+                  description: The ordered set of egress rules. Each rule contains
+                    a set of packet matching criteria and a corresponding action to
+                    apply.
+                  items:
+                    description: 'A Rule encapsulates a set of match criteria and
+                      an action. Both selector-based security Policy and security
+                      Profiles reference rules - separated out as a list of rules
+                      for organizational purposes.
+
+                      Each rule contains a set of packet matching criteria and a corresponding
+                      action to apply.'
+                    properties:
+                      action:
+                        type: string
+                      destination:
+                        description: Destination contains the match criteria for the
+                          destination of a packet.
+                        properties:
+                          namespaceSelector:
+                            description: 'NamespaceSelector is a label selector which
+                              selects the namespaces to which this rule applies. This
+                              field is not enforced by Calico V1 policies. This field
+                              is only valid for NetworkPolicy.'
+                            type: string
+                          nets:
+                            items:
+                              type: string
+                            type: array
+                          notNets:
+                            items:
+                              type: string
+                            type: array
+                          notPorts:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          notSelector:
+                            type: string
+                          ports:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          selector:
+                            type: string
+                          serviceAccounts:
+                            description: ServiceAccounts is a list of service accounts
+                              to match.
+                            properties:
+                              names:
+                                items:
+                                  type: string
+                                type: array
+                              selector:
+                                type: string
+                            type: object
+                          services:
+                            description: 'Services is a list of services to match.
+                              This field is not supported in Calico V1 policies. This
+                              field is only valid for NetworkPolicy.'
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            type: object
+                        type: object
+                      http:
+                        description: HTTP contains the match criteria for HTTP requests.
+                        properties:
+                          methods:
+                            items:
+                              type: string
+                            type: array
+                          paths:
+                            items:
+                              description: 'HTTPPath specifies an HTTP path to match.
+                                It may be either a literal path or a regular expression.
+                                If it is a literal path, it must begin with a ''/''.'
+                              properties:
+                                exact:
+                                  type: string
+                                prefix:
+                                  type: string
+                                regex:
+                                  type: string
+                              type: object
+                            type: array
+                        type: object
+                      icmp:
+                        description: ICMP is a list of ICMP match criteria.
+                        properties:
+                          code:
+                            type: integer
+                          type:
+                            type: integer
+                        type: object
+                      ipVersion:
+                        type: integer
+                      metadata:
+                        description: Metadata contains additional information for
+                          this rule
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        type: object
+                      notICMP:
+                        description: NotICMP is a list of ICMP match criteria that
+                          are negated.
+                        properties:
+                          code:
+                            type: integer
+                          type:
+                            type: integer
+                        type: object
+                      notProtocol:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^.*
+                        x-kubernetes-int-or-string: true
+                      protocol:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^.*
+                        x-kubernetes-int-or-string: true
+                      source:
+                        description: Source contains the match criteria for the source
+                          of a packet.
+                        properties:
+                          namespaceSelector:
+                            type: string
+                          nets:
+                            items:
+                              type: string
+                            type: array
+                          notNets:
+                            items:
+                              type: string
+                            type: array
+                          notPorts:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          notSelector:
+                            type: string
+                          ports:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          selector:
+                            type: string
+                          serviceAccounts:
+                            properties:
+                              names:
+                                items:
+                                  type: string
+                                type: array
+                              selector:
+                                type: string
+                            type: object
+                          services:
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                      - action
+                    type: object
+                  type: array
+                ingress:
+                  description: The ordered set of ingress rules. Each rule contains
+                    a set of packet matching criteria and a corresponding action to
+                    apply.
+                  items:
+                    description: 'A Rule encapsulates a set of match criteria and
+                      an action. Both selector-based security Policy and security
+                      Profiles reference rules - separated out as a list of rules
+                      for organizational purposes.
+
+                      Each rule contains a set of packet matching criteria and a corresponding
+                      action to apply.'
+                    properties:
+                      action:
+                        type: string
+                      destination:
+                        description: Destination contains the match criteria for the
+                          destination of a packet.
+                        properties:
+                          namespaceSelector:
+                            description: 'NamespaceSelector is a label selector which
+                              selects the namespaces to which this rule applies. This
+                              field is not enforced by Calico V1 policies. This field
+                              is only valid for NetworkPolicy.'
+                            type: string
+                          nets:
+                            items:
+                              type: string
+                            type: array
+                          notNets:
+                            items:
+                              type: string
+                            type: array
+                          notPorts:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          notSelector:
+                            type: string
+                          ports:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          selector:
+                            type: string
+                          serviceAccounts:
+                            description: ServiceAccounts is a list of service accounts
+                              to match.
+                            properties:
+                              names:
+                                items:
+                                  type: string
+                                type: array
+                              selector:
+                                type: string
+                            type: object
+                          services:
+                            description: 'Services is a list of services to match.
+                              This field is not supported in Calico V1 policies. This
+                              field is only valid for NetworkPolicy.'
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            type: object
+                        type: object
+                      http:
+                        description: HTTP contains the match criteria for HTTP requests.
+                        properties:
+                          methods:
+                            items:
+                              type: string
+                            type: array
+                          paths:
+                            items:
+                              description: 'HTTPPath specifies an HTTP path to match.
+                                It may be either a literal path or a regular expression.
+                                If it is a literal path, it must begin with a ''/''.'
+                              properties:
+                                exact:
+                                  type: string
+                                prefix:
+                                  type: string
+                                regex:
+                                  type: string
+                              type: object
+                            type: array
+                        type: object
+                      icmp:
+                        description: ICMP is a list of ICMP match criteria.
+                        properties:
+                          code:
+                            type: integer
+                          type:
+                            type: integer
+                        type: object
+                      ipVersion:
+                        type: integer
+                      metadata:
+                        description: Metadata contains additional information for
+                          this rule
+                        properties:
+                          annotations:
+                            additionalProperties:
+                              type: string
+                            type: object
+                        type: object
+                      notICMP:
+                        description: NotICMP is a list of ICMP match criteria that
+                          are negated.
+                        properties:
+                          code:
+                            type: integer
+                          type:
+                            type: integer
+                        type: object
+                      notProtocol:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^.*
+                        x-kubernetes-int-or-string: true
+                      protocol:
+                        anyOf:
+                          - type: integer
+                          - type: string
+                        pattern: ^.*
+                        x-kubernetes-int-or-string: true
+                      source:
+                        description: Source contains the match criteria for the source
+                          of a packet.
+                        properties:
+                          namespaceSelector:
+                            type: string
+                          nets:
+                            items:
+                              type: string
+                            type: array
+                          notNets:
+                            items:
+                              type: string
+                            type: array
+                          notPorts:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          notSelector:
+                            type: string
+                          ports:
+                            items:
+                              anyOf:
+                                - type: integer
+                                - type: string
+                              pattern: ^.*
+                              x-kubernetes-int-or-string: true
+                            type: array
+                          selector:
+                            type: string
+                          serviceAccounts:
+                            properties:
+                              names:
+                                items:
+                                  type: string
+                                type: array
+                              selector:
+                                type: string
+                            type: object
+                          services:
+                            properties:
+                              name:
+                                type: string
+                              namespace:
+                                type: string
+                            type: object
+                        type: object
+                    required:
+                      - action
+                    type: object
+                  type: array
+                order:
+                  description: Order is an optional field that specifies the order
+                    in which the policy is applied. Policies with smaller order values
+                    are applied before policies with larger order values.
+                  type: number
+                selector:
+                  description: 'The selector is an expression used to pick pick out
+                    the endpoints that the policy should be applied to.
+
+                    Selector expressions follow this syntax:
+
+                    `label == "value"` - selects all endpoints with a label called `label`
+                    that has the value `value`.
+
+                    `label != "value"` - selects all endpoints with a label called `label`
+                    that does not have the value `value`.
+
+                    `label in { "value1", "value2" }` - selects all endpoints with a
+                    label called `label` that has a value in the list of values.
+
+                    `label not in { "value1", "value2" }` - selects all endpoints
+                    with a label called `label` that does not have a value in the list
+                    of values.
+
+                    `has(label)` - selects all endpoints that have a label called `label`.
+
+                    `!has(label)` - selects all endpoints that do not have a label
+                    called `label`.
+
+                    `"all()"` - selects all endpoints.
+
+                    `"none()"` - selects no endpoints.
+
+                    Multiple expressions can be combined with `&&` and `||`. For example:
+
+                    `label1 == "value1" && label2 == "value2"`
+
+                    `label1 == "value1" || has(label2)`
+
+                    The selector can be left empty, in which case it is treated as
+                    "all()".'
+                  type: string
+                serviceAccountSelector:
+                  description: 'ServiceAccountSelector is a label selector which selects
+                    the service accounts to which this policy applies. This field
+                    is not valid for GlobalNetworkPolicy.'
+                  type: string
+                tier:
+                  description: 'Tier specifies the tier that this policy belongs to.
+                    If not specified, this policy is default-ordered with other policies
+                    that have no tier specified. [Default: default]'
+                  type: string
+                types:
+                  description: 'Types indicates whether this policy applies to ingress,
+                    egress, or both. When not explicitly specified (and so the value
+                    on creation is empty or nil), Calico defaults an egress-only policy
+                    to just ["Egress"] and an ingress-only policy to just ["Ingress"].
+                    If the policy contains both ingress and egress rules, then this
+                    field will be defaulted to ["Ingress", "Egress"]. This field is
+                    required for all policies created with Calico''s V3 API.'
+                  items:
+                    type: string
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: networksets.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: NetworkSet
+    listKind: NetworkSetList
+    plural: networksets
+    singular: networkset
+  preserveUnknownFields: false
+  scope: Namespaced
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: NetworkSet contains a set of arbitrary IP addresses/CIDRs that
+            can be used in Calico NetworkPolicy.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: NetworkSetSpec contains the specification for a NetworkSet
+                resource.
+              properties:
+                nets:
+                  description: The list of IP networks that belong to this set.
+                  items:
+                    type: string
+                  type: array
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: tiers.crd.projectcalico.org
+spec:
+  group: crd.projectcalico.org
+  names:
+    kind: Tier
+    listKind: TierList
+    plural: tiers
+    singular: tier
+  preserveUnknownFields: false
+  scope: Cluster
+  versions:
+    - name: v1
+      schema:
+        openAPIV3Schema:
+          description: Tier contains a set of policies that are applied to a cluster.
+          properties:
+            apiVersion:
+              description: 'APIVersion defines the versioned schema of this representation
+                of an object. Servers should convert recognized schemas to the latest
+                internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+              type: string
+            kind:
+              description: 'Kind is a string value representing the REST resource this
+                object represents. Servers may infer this from the endpoint the client
+                submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+              type: string
+            metadata:
+              type: object
+            spec:
+              description: TierSpec contains the specification for a Tier resource.
+              properties:
+                order:
+                  description: Order is an optional field that specifies the order
+                    in which the tier is applied. Tiers with smaller order values
+                    are applied before tiers with larger order values.
+                  type: number
+              type: object
+          type: object
+      served: true
+      storage: true
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: calico-node
+  namespace: kube-system
+  labels:
+    k8s-app: calico-node
+spec:
+  selector:
+    matchLabels:
+      k8s-app: calico-node
+  updateStrategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        k8s-app: calico-node
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      hostNetwork: true
+      tolerations:
+        - effect: NoSchedule
+          operator: Exists
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - effect: NoExecute
+          operator: Exists
+      serviceAccountName: calico-node
+      priorityClassName: system-node-critical
+      terminationGracePeriodSeconds: 0
+      initContainers:
+        - name: upgrade-ipam
+          image: docker.io/calico/cni:v3.28.0
+          command: ["/opt/cni/bin/calico-ipam", "-upgrade"]
+          env:
+            - name: KUBERNETES_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CALICO_NETWORKING_BACKEND
+              valueFrom:
+                configMapKeyRef:
+                  name: calico-config
+                  key: calico_backend
+          volumeMounts:
+            - mountPath: /var/lib/cni/networks
+              name: host-local-net-dir
+            - mountPath: /host/opt/cni/bin
+              name: cni-bin-dir
+          securityContext:
+            privileged: true
+        - name: install-cni
+          image: docker.io/calico/cni:v3.28.0
+          command: ["/opt/cni/bin/install"]
+          env:
+            - name: CNI_CONF_NAME
+              value: "10-calico.conflist"
+            - name: CNI_NETWORK_CONFIG
+              valueFrom:
+                configMapKeyRef:
+                  name: calico-config
+                  key: cni_network_config
+            - name: KUBERNETES_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CNI_MTU
+              valueFrom:
+                configMapKeyRef:
+                  name: calico-config
+                  key: veth_mtu
+            - name: SLEEP
+              value: "false"
+          volumeMounts:
+            - mountPath: /host/opt/cni/bin
+              name: cni-bin-dir
+            - mountPath: /host/etc/cni/net.d
+              name: cni-net-dir
+          securityContext:
+            privileged: true
+        - name: flexvol-driver
+          image: docker.io/calico/pod2daemon-flexvol:v3.28.0
+          volumeMounts:
+            - name: flexvol-driver-host
+              mountPath: /host/driver
+          securityContext:
+            privileged: true
+      containers:
+        - name: calico-node
+          image: docker.io/calico/node:v3.28.0
+          env:
+            - name: DATASTORE_TYPE
+              value: "kubernetes"
+            - name: WAIT_FOR_DATASTORE
+              value: "true"
+            - name: NODENAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: CALICO_NETWORKING_BACKEND
+              valueFrom:
+                configMapKeyRef:
+                  name: calico-config
+                  key: calico_backend
+            - name: CLUSTER_TYPE
+              value: "k8s"
+            - name: IP
+              value: "autodetect"
+            - name: CALICO_IPV4POOL_CIDR
+              value: "10.244.0.0/16"
+            - name: CALICO_IPV4POOL_IPIP
+              value: "Always"
+            - name: FELIX_IPINIPMTU
+              valueFrom:
+                configMapKeyRef:
+                  name: calico-config
+                  key: veth_mtu
+            - name: FELIX_DEFAULTENDPOINTTOHOSTACTION
+              value: "ACCEPT"
+            - name: FELIX_IPV6SUPPORT
+              value: "false"
+            - name: FELIX_LOGSEVERITYSCREEN
+              value: "Info"
+            - name: FELIX_HEALTHENABLED
+              value: "true"
+          securityContext:
+            privileged: true
+          resources:
+            requests:
+              cpu: 250m
+          livenessProbe:
+            exec:
+              command:
+                - /bin/calico-node
+                - -felix-live
+            periodSeconds: 10
+            initialDelaySeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /bin/calico-node
+                - -felix-ready
+            periodSeconds: 10
+          volumeMounts:
+            - mountPath: /lib/modules
+              name: lib-modules
+              readOnly: true
+            - mountPath: /run/xtables.lock
+              name: xtables-lock
+            - mountPath: /var/run/calico
+              name: var-run-calico
+            - mountPath: /var/lib/calico
+              name: var-lib-calico
+            - name: policysync
+              mountPath: /var/run/nodeagent
+            - name: cni-log-dir
+              mountPath: /var/log/calico/cni
+      volumes:
+        - name: lib-modules
+          hostPath:
+            path: /lib/modules
+        - name: var-run-calico
+          hostPath:
+            path: /var/run/calico
+        - name: var-lib-calico
+          hostPath:
+            path: /var/lib/calico
+        - name: xtables-lock
+          hostPath:
+            path: /run/xtables.lock
+            type: FileOrCreate
+        - name: cni-bin-dir
+          hostPath:
+            path: /opt/cni/bin
+        - name: cni-net-dir
+          hostPath:
+            path: /etc/cni/net.d
+        - name: host-local-net-dir
+          hostPath:
+            path: /var/lib/cni/networks
+        - name: policysync
+          hostPath:
+            type: DirectoryOrCreate
+            path: /var/run/nodeagent
+        - name: cni-log-dir
+          hostPath:
+            path: /var/log/calico/cni
+            type: DirectoryOrCreate
+        - name: flexvol-driver-host
+          hostPath:
+            path: /usr/libexec/kubernetes/kubelet-plugins/volume/exec/nodeagent~pod2daemon/
+            type: DirectoryOrCreate
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: calico-kube-controllers
+  namespace: kube-system
+  labels:
+    k8s-app: calico-kube-controllers
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      k8s-app: calico-kube-controllers
+  strategy:
+    type: Recreate
+  template:
+    metadata:
+      name: calico-kube-controllers
+      namespace: kube-system
+      labels:
+        k8s-app: calico-kube-controllers
+    spec:
+      nodeSelector:
+        kubernetes.io/os: linux
+      tolerations:
+        - key: CriticalAddonsOnly
+          operator: Exists
+        - key: node-role.kubernetes.io/master
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/control-plane
+          effect: NoSchedule
+      serviceAccountName: calico-kube-controllers
+      priorityClassName: system-cluster-critical
+      containers:
+        - name: calico-kube-controllers
+          image: docker.io/calico/kube-controllers:v3.28.0
+          env:
+            - name: ENABLED_CONTROLLERS
+              value: node
+            - name: DATASTORE_TYPE
+              value: kubernetes
+          livenessProbe:
+            exec:
+              command:
+                - /usr/bin/check-status
+                - -l
+            periodSeconds: 10
+            initialDelaySeconds: 10
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - /usr/bin/check-status
+                - -r
+            periodSeconds: 10

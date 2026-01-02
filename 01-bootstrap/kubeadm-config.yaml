@@ -1,0 +1,24 @@
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: ClusterConfiguration
+kubernetesVersion: v1.35.0
+controlPlaneEndpoint: "master01:6443"
+apiServer:
+  certSANs:
+    - "master01"
+    - "master02"
+    # Add any external IPs or DNS names for the API server here if needed
+networking:
+  podSubnet: "10.244.0.0/16"
+  serviceSubnet: "10.96.0.0/12"
+etcd:
+  local:
+    imageRepository: "registry.k8s.io"
+    imageTag: "3.5.12-0"
+
+---
+apiVersion: kubeadm.k8s.io/v1beta4
+kind: InitConfiguration
+nodeRegistration:
+  kubeletExtraArgs:
+  - name: "cgroup-driver"
+    value: "systemd"

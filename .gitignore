@@ -1,0 +1,71 @@
+# =============================================================================
+# Kubernetes Lab - .gitignore
+# =============================================================================
+
+# Generated files
+kubeconfig
+kubeconfig.bak
+*.bak
+
+# Cluster share (generated join scripts with tokens)
+_cluster_share/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Logs
+*.log
+logs/
+
+# Helm
+charts/*.tgz
+
+# Temp files
+*.tmp
+*.temp
+.cache/
+
+# Archive (if not needed in git)
+# archive/
+
+# Node modules (if using any JS tools)
+node_modules/
+
+# Python (if using any Python scripts)
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Secrets (never commit!)
+*.pem
+*.key
+*secret*
+*password*
+!*-notes.md
+
+# Terraform (if used)
+.terraform/
+*.tfstate
+*.tfstate.*
+.terraform.lock.hcl
+
+# AI Assistants
+.cursor/
+.copilot/
+.claude/
+.gemini/
+.aider*
+.continue/
+.agent/
+*.aider.chat.history.md

@@ -1,0 +1,17 @@
+# traefik-values.yaml
+# Expose Traefik via NodePort for local lab access
+service:
+  type: NodePort
+
+# Enable the Traefik dashboard and expose it
+providers:
+  kubernetesCRD:
+    enabled: true
+  kubernetesIngress:
+    enabled: true
+
+dashboard:
+  enabled: true
+  # In a real setup, you'd secure this with an IngressRoute
+  # For this lab, we keep it simple
+  insecure: true

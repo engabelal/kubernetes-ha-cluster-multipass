@@ -1,0 +1,2 @@
+  kubeadm join master01:6443 --token 248ctn.fwxacwau3jyfoss7 \
+kubeadm join master01:6443 --token 248ctn.fwxacwau3jyfoss7 \
