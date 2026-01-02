@@ -11,7 +11,27 @@ Think of a Load Balancer (LB) as a **Receptionist** for your cluster.
 
 ### Architecture Diagram
 
-![HAProxy Architecture Diagram](/Users/ahmedbelal/.gemini/antigravity/brain/b43bfe71-fdae-41cd-a66c-be4f7f52fa97/haproxy_architecture_1767372052383.png)
+```text
+       +-----------------+
+       |  User / Laptop  |
+       +--------+--------+
+                |
+                v
+    [ HAProxy Load Balancer ]
+    ( 192.168.x.x )
+                |
+      +---------+---------+
+      |                   |
+      v                   v
++------------+     +-------------+
+| K8s API    |     | Web Traffic |
+| (Port 6443)|     | (Port 80/443)|
++-----+------+     +------+------+
+      |                   |
++-----+------+     +------+------+
+|   MASTERS  |     |   WORKERS   |
++------------+     +-------------+
+```
 
 We will configure HAProxy to handle **three** types of traffic:
 1.  **Cluster Management (API)**: Port `6443` -> Forwards to Master Nodes.
@@ -25,8 +45,8 @@ We will configure HAProxy to handle **three** types of traffic:
 Run the script to create the VM and install the HAProxy software:
 
 ```bash
-chmod +x deploy-haproxy-vm.sh
-./deploy-haproxy-vm.sh
+chmod +x 02-deploy-haproxy-vm.sh
+./02-deploy-haproxy-vm.sh
 ```
 
 ---

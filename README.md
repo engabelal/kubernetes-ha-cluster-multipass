@@ -72,16 +72,16 @@ For a full "Zero to Hero" deployment, run the scripts in this order:
 
 ### 1. Deploy Kubernetes Cluster
 ```bash
-chmod +x deploy-virtual-machines.sh
-./deploy-virtual-machines.sh
+chmod +x 01-deploy-virtual-machines.sh
+./01-deploy-virtual-machines.sh
 ```
 *This bootstraps the HA cluster, installs CNI, Ingress, and Metrics Server.*
 
 ### 2. Deploy Load Balancer (Optional but Recommended)
 For a production-like experience, deploy the dedicated HAProxy VM:
 ```bash
-chmod +x deploy-haproxy-vm.sh
-./deploy-haproxy-vm.sh
+chmod +x 02-deploy-haproxy-vm.sh
+./02-deploy-haproxy-vm.sh
 ```
 *   Follow the **[HAProxy Guide](./HAPROXY_GUIDE.md)** to configure routing rules.
 *   Once configured, you can access the cluster API and Applications via the HAProxy IP.
@@ -109,7 +109,7 @@ For manual deployment with detailed explanations for each step:
 
 ## Connecting to the Cluster
 
-To interact with your cluster from your host machine using `kubectl`, you need the `kubeconfig` file. The `deploy-virtual-machines.sh` script automatically creates this for you.
+To interact with your cluster from your host machine using `kubectl`, you need the `kubeconfig` file. The `01-deploy-virtual-machines.sh` script automatically creates this for you.
 
 1.  **Export the `KUBECONFIG` variable**:
     ```bash
@@ -146,10 +146,10 @@ To be able to `ping master01` or `ssh ubuntu@worker01` directly from your host t
 
 | Action | Command |
 |--------|---------|
-| **Deploy** | `./deploy-virtual-machines.sh` |
-| **Start** | `./start-cluster.sh` |
-| **Stop** | `./stop-cluster.sh` |
-| **Destroy** | `./destroy-cluster.sh` |
+| **Deploy** | `./01-deploy-virtual-machines.sh` |
+| **Start** | `./03-start-cluster.sh` |
+| **Stop** | `./04-stop-cluster.sh` |
+| **Destroy** | `./05-destroy-cluster.sh` |
 
 > **Note:** Start/Stop maintains VMs and data. Destroy deletes everything.
 
