@@ -29,17 +29,36 @@ The lab sets up a high-availability (HA) control plane with two masters and two 
 
 ## Cluster Architecture
 
-*   **VMs**: 4 Ubuntu 24.04 VMs.
-    *   `master01` (2 CPUs, 4GB RAM, 20GB Disk)
-    *   `master02` (2 CPUs, 4GB RAM, 20GB Disk)
-    *   `worker01` (2 CPUs, 2GB RAM, 20GB Disk)
-    *   `worker02` (2 CPUs, 2GB RAM, 20GB Disk)
+*   **Nodes (VMs)**:
+    *   `master01`, `master02` (Control Plane)
+    *   `worker01`, `worker02` (Data Plane)
+    *   `haproxy` (Load Balancer) **[NEW]**
 *   **Networking**:
     *   **Pod CIDR**: `10.244.0.0/16`
     *   **Service CIDR**: `10.96.0.0/12`
-*   **Control Plane**:
-    *   Stacked `etcd`: Each control-plane node runs its own `etcd` instance, which is part of the cluster's `etcd` ring.
-    *   The API server endpoint is initially on `master01`. In a real production scenario, a dedicated load balancer would sit in front of the control-plane nodes.
+    *   **External Access**: HAProxy (VIP) -> Ingress Controller (NodePort) -> Services.
+
+```text
+       +-----------------+
+       |  User / Laptop  |
+       +--------+--------+
+                |
+                v
+    [ HAProxy Load Balancer ]
+    ( 192.168.x.x )
+                |
+      +---------+---------+
+      |                   |
+      v                   v
++------------+     +-------------+
+| K8s API    |     | Web Traffic |
+| (Port 6443)|     | (Port 80/443)|
++-----+------+     +------+------+
+      |                   |
++-----+------+     +------+------+
+|   MASTERS  |     |   WORKERS   |
++------------+     +-------------+
+```
 
 ## Prerequisites
 
@@ -49,20 +68,30 @@ The lab sets up a high-availability (HA) control plane with two masters and two 
 
 ## Automated Deployment (Recommended)
 
-For a fully automated, zero-manual-intervention deployment of the entire Kubernetes lab, simply execute the `deploy-virtual-machines.sh` script from the root of this repository on your host machine:
+For a full "Zero to Hero" deployment, run the scripts in this order:
 
+### 1. Deploy Kubernetes Cluster
 ```bash
 chmod +x deploy-virtual-machines.sh
 ./deploy-virtual-machines.sh
 ```
+*This bootstraps the HA cluster, installs CNI, Ingress, and Metrics Server.*
 
-This script will:
-1.  Create the Multipass VMs and mount the project directory.
-2.  Bootstrap the Kubernetes cluster with `kubeadm`.
-3.  Install Calico CNI.
-4.  Install Ingress-NGINX.
-5.  Install Metrics Server.
-6.  Automatically retrieve and configure the `kubeconfig` on your host.
+### 2. Deploy Load Balancer (Optional but Recommended)
+For a production-like experience, deploy the dedicated HAProxy VM:
+```bash
+chmod +x deploy-haproxy-vm.sh
+./deploy-haproxy-vm.sh
+```
+*   Follow the **[HAProxy Guide](./HAPROXY_GUIDE.md)** to configure routing rules.
+*   Once configured, you can access the cluster API and Applications via the HAProxy IP.
+
+### 3. Verify Deployment
+You can use the example manifest to test the flow (HAProxy -> Ingress -> POD):
+
+```bash
+kubectl apply -f examples/test-whoami.yaml
+```
 
 ## Step-by-Step Installation Guide
 
