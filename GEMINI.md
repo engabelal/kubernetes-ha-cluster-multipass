@@ -1,4 +1,4 @@
-# GEMINI.md
+# Project Overview
 
 ## Project Overview
 
