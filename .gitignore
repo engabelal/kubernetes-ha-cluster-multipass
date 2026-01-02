@@ -69,3 +69,8 @@ venv/
 .continue/
 .agent/
 *.aider.chat.history.md
+GEMINI.md
+CLAUDE.md
+CHATGPT.md
+COPILOT.md
+*.ai.md

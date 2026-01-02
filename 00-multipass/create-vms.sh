@@ -203,13 +203,17 @@ for vm in master01 master02 worker01 worker02; do
 
     # Transfer, extract, cleanup
     multipass transfer "${PROJECT_DIR}/k8s-lab-bundle.tar.gz" "${vm}:/home/ubuntu/k8s-lab-bundle.tar.gz"
-    multipass exec "$vm" -- tar xzf /home/ubuntu/k8s-lab-bundle.tar.gz -C /home/ubuntu/k8s-lab 2>/dev/null
+
+    # Extract using bash to handle redirection properly inside the VM
+    # This suppresses "Ignoring unknown extended header keyword" warnings from macOS tarballs
+    multipass exec "$vm" -- bash -c "tar xzf /home/ubuntu/k8s-lab-bundle.tar.gz -C /home/ubuntu/k8s-lab 2>/dev/null"
+
     multipass exec "$vm" -- rm /home/ubuntu/k8s-lab-bundle.tar.gz
 
     # Make scripts executable
     multipass exec "$vm" -- find /home/ubuntu/k8s-lab -name "*.sh" -exec chmod +x {} \;
 
-    echo "Done ✓"
+    echo "Done"
 done
 
 rm "${PROJECT_DIR}/k8s-lab-bundle.tar.gz"

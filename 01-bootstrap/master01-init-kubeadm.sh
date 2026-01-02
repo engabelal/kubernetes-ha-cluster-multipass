@@ -22,7 +22,7 @@ echo ">>> Generating/Refreshing join scripts..."
 mkdir -p "$SHARE_DIR"
 
 # 1. Generate Worker Join Command
-echo ">>> Generating worker-join.sh..."
+echo ">>> Generating worker-join.sh (Creating FRESH token)..."
 WORKER_JOIN_CMD=$(sudo kubeadm token create --print-join-command)
 echo "#!/bin/bash" > "${SHARE_DIR}/worker-join.sh"
 echo "sudo ${WORKER_JOIN_CMD}" >> "${SHARE_DIR}/worker-join.sh"
@@ -30,7 +30,7 @@ chmod +x "${SHARE_DIR}/worker-join.sh"
 
 # 2. Generate Control Plane Join Command
 # We need a fresh certificate key for security and robustness
-echo ">>> Generating master-join.sh..."
+echo ">>> Generating master-join.sh (Creating FRESH certificate key)..."
 CERT_KEY=$(sudo kubeadm init phase upload-certs --upload-certs | tail -1)
 # Re-use the token or create a new one? Creating a new one is safer to ensure we have the full command.
 # But we can just append the cert key to the worker command + --control-plane
@@ -39,6 +39,9 @@ echo "sudo ${WORKER_JOIN_CMD} --control-plane --certificate-key ${CERT_KEY}" >> 
 chmod +x "${SHARE_DIR}/master-join.sh"
 
 echo ">>> Join scripts generated in ${SHARE_DIR}:"
+# Verify content logic (for logs only)
+grep -q "kubeadm join" "${SHARE_DIR}/master-join.sh" && echo " - master-join.sh: Validated"
+grep -q "kubeadm join" "${SHARE_DIR}/worker-join.sh" && echo " - worker-join.sh: Validated"
 ls -l "${SHARE_DIR}"
 
 # Set up kubeconfig for the ubuntu user
