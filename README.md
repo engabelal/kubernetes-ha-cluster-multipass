@@ -150,8 +150,14 @@ To be able to `ping master01` or `ssh ubuntu@worker01` directly from your host t
 | **Start** | `./03-start-cluster.sh` |
 | **Stop** | `./04-stop-cluster.sh` |
 | **Destroy** | `./05-destroy-cluster.sh` |
+| **Snapshot** | `./06-snapshot-cluster.sh` |
+| **Restore** | `./07-restore-cluster.sh` |
 
-> **Note:** Start/Stop maintains VMs and data. Destroy deletes everything.
+> **Note:**
+> *   **Start/Stop**: Maintains VMs and data.
+> *   **Snapshot**: Takes a synchronized snapshot of ALL nodes (requires stopping the cluster).
+> *   **Restore**: Reverts the entire cluster to a previous state (DATA LOSS of changes made after snapshot).
+> *   **Destroy**: Deletes everything.
 
 ## Troubleshooting
 
