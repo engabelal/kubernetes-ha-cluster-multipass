@@ -60,7 +60,7 @@ venv/
 *.tfstate.*
 .terraform.lock.hcl
 
-# AI Assistants
+# AI Assistants & Documentation to Ignore
 .cursor/
 .copilot/
 .claude/
@@ -74,3 +74,7 @@ CLAUDE.md
 CHATGPT.md
 COPILOT.md
 *.ai.md
+TASK.md
+IMPLEMENTATION_PLAN.md
+WALKTHROUGH.md
+system_instructions.md
